@@ -38,6 +38,20 @@ The OpenAPI document in this repo (`openapi.yaml`) is a minimal dummy API used a
 
 The workflow sets `spec-url` to a **raw GitHub URL** for the commit being built (`raw.githubusercontent.com/.../<sha>/openapi.yaml`). Postman must be able to **fetch that URL** (typically a **public** repository). If the repo is private, host the spec somewhere Postman can reach and point `spec-url` there instead.
 
+## Troubleshooting
+
+### `postman login --with-api-key` reports an invalid API key
+
+During bootstrap, [postman-bootstrap-action](https://github.com/postman-cs/postman-bootstrap-action) installs the Postman CLI and runs `postman login --with-api-key` before commands such as `postman spec lint`. If that step fails with “The provided Postman API key is invalid”, the HTTP APIs can still work while the CLI does not. Common causes:
+
+1. **EU data residency** — For teams on a [Postman EU data residency](https://learning.postman.com/docs/administration/enterprise/about-eu-data-residency/) plan, the CLI requires `--region eu` on login (see [Postman CLI login](https://learning.postman.com/docs/postman-cli/postman-cli-options/#postman-login)). The bootstrap action currently invokes login **without** `--region eu`, so EU-hosted keys often fail with a generic invalid-key error. Resolution paths: work with Postman CS on an action update (or a fork) that passes the EU region, or confirm whether your stack is US-hosted.
+
+2. **Beta mint URL vs production CLI** — This sample mints session tokens from `api.getpostman-beta.com`. The Postman CLI installed from `dl-cli.pstmn.io` authenticates against **production**. If your API key is valid only on the **beta** API surface, minting in CI can succeed while `postman login` fails. Align environment (beta vs prod) with how your key was issued, or ask Postman CS when CLI and mint endpoints will match for your tenant.
+
+3. **Secret value** — Confirm the GitHub Actions secret is named **`POSTMAN_API_KEY`**, has no accidental newline or spaces, and matches a current key from the same Postman environment (beta vs prod) the CLI uses.
+
+**Sanity check locally:** run `postman login --with-api-key "$POSTMAN_API_KEY"` on your machine (add `--region eu` if your team requires it). If login fails locally, fix that before expecting CI to pass.
+
 ## Customization
 
 - Change **`project-name`** in the workflow if `sample-pet-store-github-demo` collides with an existing Postman project.
