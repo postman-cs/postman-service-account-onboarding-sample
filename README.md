@@ -1,39 +1,76 @@
-# Postman service-account onboarding sample
+# Postman service-account onboarding (GitHub Actions sample)
 
-CI flow: **mint** a short-lived session from **`service-account-tokens`**, **build mainline [postman-eng/postman-cli](https://github.com/postman-eng/postman-cli)** with a tiny login patch, then run **[postman-api-onboarding-action](https://github.com/postman-cs/postman-api-onboarding-action)**.
+This repository is a **working example** of onboarding an OpenAPI spec with **[postman-api-onboarding-action](https://github.com/postman-cs/postman-api-onboarding-action)** when you use a **beta service-account API key** and mint a **session token** from **`service-account-tokens`**.
 
-## Why build postman-eng CLI here
+It is aimed at teams who hit **`postman login --with-api-key` invalid key** on shipped CLI builds because login validates against the wrong plane or **`/me`** does not treat service-account keys like normal user keys.
 
-Public installers ship a binary that **validates API keys against production `/me`**. Beta service-account keys can fail there even when mint works. The eng tree includes **`lib/config/cli-environment/`** and respects **`POSTMAN_CHANNEL=beta`** (beta API base URLs, `.postman-beta` config dir, etc.).
+---
 
-That still may not fix **service accounts** if `/me` does not accept those keys. So this repo applies **`scripts/patch-postman-cli-ci-login.js`** to eng **`lib/login/index.js`**: when **`POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN`** is set, **`postman login --with-api-key`** skips `/me` validation, resolves **`userId`** via **`iapub …/api/sessions/current`** using the minted token, and stores **both** `postmanApiKey` and `accessToken` in the CLI profile.
+## What this workflow does (end to end)
 
-## How it works
+The workflow file is [`.github/workflows/postman-onboarding.yml`](.github/workflows/postman-onboarding.yml). Each run:
 
-1. Check out **`postman-eng/postman-cli`** (`develop`) next to this repo.
-2. Run the patch script, **`pnpm install`**, **`pnpm run build`**, install **`dist/bin/postman.js`** as **`postman`** on `PATH`.
-3. Mint with **`POST https://api.getpostman-beta.com/service-account-tokens`** and capture **`session.token`** + **`session.identity.team`** (fallback: **`.identity.team`**).
-4. Run onboarding with **`POSTMAN_CHANNEL=beta`**, **`POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN`** = minted token, and the usual **`postman-api-key`** / **`postman-access-token`** inputs.
+1. **Clones [postman-eng/postman-cli](https://github.com/postman-eng/postman-cli)** (`develop`) into `postman-cli-src/` on the runner (needs a PAT—see below).
+2. **Runs [`scripts/patch-postman-cli-ci-login.js`](scripts/patch-postman-cli-ci-login.js)** on that clone only. The patch teaches `postman login --with-api-key` to accept a **minted session token** via env (`POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN`) so bootstrap does not rely on **`GET …/me`** with the API key alone.
+3. **Builds** that clone with **pnpm** (`pnpm install`, `pnpm run build`) and installs `dist/bin/postman.js` as the `postman` command on `PATH`.  
+   [postman-bootstrap-action](https://github.com/postman-cs/postman-bootstrap-action) sees `postman` already installed and **does not** download the public installer script.
+4. Sets **`POSTMAN_CHANNEL=beta`** on the job so eng **`lib/config/cli-environment`** resolves **beta base URLs** (for example `https://api.getpostman-beta.com`) and related paths—same mechanism described internally under `lib/config/cli-environment/`.
+5. **Mints** a token: `POST https://api.getpostman-beta.com/service-account-tokens` with header `x-api-key: <POSTMAN_API_KEY>`, reads **`session.token`** and **`session.identity.team`** (with fallback to top-level **`identity.team`** if present).
+6. Runs **postman-api-onboarding-action** with:
+   - **`postman-api-key`** / **`postman-access-token`** / **`postman-team-id`** from mint outputs  
+   - **`POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN`** on the onboarding step so patched **`postman login`** can persist **API key + access token** together.
 
-## Setup (GitHub Actions secrets)
+---
 
-| Secret | Purpose |
+## Official `postman-cli` on GitHub is not modified
+
+The patch runs **only on the ephemeral checkout inside GitHub Actions**. There is **no commit**, **no push**, and **no fork required**. When the job finishes, the runner discards the clone.
+
+The canonical **`postman-eng/postman-cli`** repository stays exactly as your team maintains it. Long term, the same behavior belongs in a normal PR to eng CLI if product wants it supported without a CI-only patch.
+
+---
+
+## What you need to configure
+
+### GitHub repository secrets
+
+In **Settings → Secrets and variables → Actions** for this repo:
+
+| Secret | Required | Description |
+| --- | --- | --- |
+| **`POSTMAN_API_KEY`** | Yes | Postman **service account** API key. Must work against **`https://api.getpostman-beta.com/service-account-tokens`** for minting. |
+| **`POSTMAN_ENG_CLI_CHECKOUT_TOKEN`** | Yes | Personal access token for an account that can **read** the private **`postman-eng/postman-cli`** repo. Used only by `actions/checkout` to clone it. Typical choices: **classic PAT** with **`repo`** scope for that org, or a **fine-grained PAT** with **Contents: Read** on **`postman-eng/postman-cli`**. |
+
+The default **`GITHUB_TOKEN`** for this repo **cannot** clone another private org repo; that is why the second secret exists.
+
+### GitHub Actions billing
+
+If GitHub shows a message about **failed payments** or **spending limits**, jobs will not start until **Billing & plans** is fixed for the account or organization that owns this repo.
+
+### Optional: private npm packages (`pnpm install`)
+
+If the **Patch and build Postman CLI** step fails while resolving **`@postman/*`** packages, your CI likely needs **internal npm registry credentials** (for example **`NODE_AUTH_TOKEN`** and an **`.npmrc`** step). That is environment-specific; wire it the same way other Postman eng repos do.
+
+---
+
+## OpenAPI spec URL
+
+The workflow passes **`spec-url`** as a **`raw.githubusercontent.com`** URL for **`openapi.yaml`** at the **current commit SHA**. Postman’s servers must be able to **download that URL**, which usually means this repo is **public** or the spec is hosted somewhere reachable to Postman.
+
+---
+
+## Customization (common edits)
+
+| Goal | Where to change |
 | --- | --- |
-| **`POSTMAN_API_KEY`** | Service account API key (mint + APIs). |
-| **`POSTMAN_ENG_CLI_CHECKOUT_TOKEN`** | PAT (or fine-grained token) with **`contents: read`** on **`postman-eng/postman-cli`** so Actions can check out the private repo. |
+| Different CLI branch or tag | `ref:` on the **Checkout Postman CLI** step in [`.github/workflows/postman-onboarding.yml`](.github/workflows/postman-onboarding.yml) |
+| Different Postman project name | `project-name` input on the onboarding step |
+| Org / Bifrost behavior | `org-mode`, **`POSTMAN_TEAM_ID`** via mint output (already wired) or action inputs per upstream docs |
+| Generate CI workflow from onboarding | `generate-ci-workflow: 'true'` |
 
-If **`pnpm install`** fails on **`@postman/*`** packages, you may need **npm registry auth** for Postman’s registry (add **`NODE_AUTH_TOKEN`** / **`.npmrc`** per internal docs).
-
-## Spec URL
-
-`spec-url` uses **`raw.githubusercontent.com`** for the commit SHA; Postman must be able to fetch it (usually a **public** repo).
-
-## Customization
-
-- Bump **`ref:`** on the **`postman-eng/postman-cli`** checkout if you need another branch.
-- Adjust **`project-name`**, **`org-mode`**, **`generate-ci-workflow`** on the onboarding step as needed.
+---
 
 ## References
 
 - [postman-api-onboarding-action](https://github.com/postman-cs/postman-api-onboarding-action)
-- [postman-eng/postman-cli](https://github.com/postman-eng/postman-cli) (internal)
+- [postman-eng/postman-cli](https://github.com/postman-eng/postman-cli) (internal source this workflow builds)
