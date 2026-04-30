@@ -3,6 +3,8 @@
 #
 # Repository secrets (GitHub → Settings → Secrets):
 #   POSTMAN_API_KEY — API key for the service account (mint endpoint + bootstrap/sync).
+#   POSTMAN_CLI_RUST_GITHUB_TOKEN — PAT with repo contents read on postman-cs/postman-cli-rust
+#     (needed to download the private release binary; default GITHUB_TOKEN cannot access sibling private repos).
 #
 # postman-team-id is taken from the mint response (.session.identity.team, or .identity.team).
 #
@@ -23,6 +25,8 @@ permissions:
 jobs:
   onboard:
     runs-on: ubuntu-latest
+    env:
+      POSTMAN_CLI_RUST_VERSION: v1.32.0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,6 +70,22 @@ jobs:
           echo "::add-mask::${TOKEN}"
           echo "token=${TOKEN}" >> "${GITHUB_OUTPUT}"
           echo "team_id=${TEAM_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install Postman CLI (Rust fork)
+        env:
+          GH_TOKEN: ${{ secrets.POSTMAN_CLI_RUST_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::Set Actions secret POSTMAN_CLI_RUST_GITHUB_TOKEN (PAT with read access to postman-cs/postman-cli-rust releases)."
+            exit 1
+          fi
+          gh release download "${POSTMAN_CLI_RUST_VERSION}" \
+            -R postman-cs/postman-cli-rust \
+            -p 'postman-cli-linux-x64' \
+            -D /tmp/postman-cli-rust
+          sudo install -m 0755 /tmp/postman-cli-rust/postman-cli-linux-x64 /usr/local/bin/postman
+          postman --version
 
       - name: Postman API onboarding
         uses: postman-cs/postman-api-onboarding-action@main
