@@ -4,7 +4,7 @@
 # Repository secrets (GitHub → Settings → Secrets):
 #   POSTMAN_API_KEY — API key for the service account (mint endpoint + bootstrap/sync).
 #
-# postman-team-id is taken from the mint response (.identity.team), same payload as the token.
+# postman-team-id is taken from the mint response (.session.identity.team, or .identity.team).
 #
 # Note: spec-url uses raw.githubusercontent.com; that URL must be reachable by Postman
 # (public repo or equivalent). Private repos need a hosted spec URL Postman can fetch.
@@ -52,14 +52,14 @@ jobs:
             exit 1
           fi
           TOKEN="$(echo "${RESPONSE}" | jq -r '.session.token // empty')"
-          TEAM_ID="$(echo "${RESPONSE}" | jq -r '.identity.team // empty')"
+          TEAM_ID="$(echo "${RESPONSE}" | jq -r '.session.identity.team // .identity.team // empty')"
           if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
             echo "::error::Mint succeeded (HTTP ${HTTP_CODE}) but response had no .session.token"
             echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
             exit 1
           fi
           if [ -z "${TEAM_ID}" ] || [ "${TEAM_ID}" = "null" ]; then
-            echo "::error::Could not read identity.team from service-account-tokens response"
+            echo "::error::Could not read team id (.session.identity.team or .identity.team) from mint response"
             echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
             exit 1
           fi

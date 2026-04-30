@@ -12,11 +12,11 @@ Previously, teams often copied a long-lived access token from the Postman CLI af
 
 ## How it works
 
-1. **Mint token** — `POST` to `https://api.getpostman-beta.com/service-account-tokens` with header `x-api-key: <POSTMAN_API_KEY>` (empty JSON body). The response includes `session.token` and `identity.team`; the workflow reads both and passes the token as `postman-access-token` and the team id as `postman-team-id`.
+1. **Mint token** — `POST` to `https://api.getpostman-beta.com/service-account-tokens` with header `x-api-key: <POSTMAN_API_KEY>` (JSON body `{}`). The response includes `session.token` and team id under `session.identity.team` (with a fallback to top-level `identity.team` if present); the workflow passes those to `postman-access-token` and `postman-team-id`.
 2. **Onboard** — the workflow runs [postman-cs/postman-api-onboarding-action](https://github.com/postman-cs/postman-api-onboarding-action) with:
    - `postman-api-key` → same API key (bootstrap and sync operations).
    - `postman-access-token` → the minted session token (Bifrost / governance integration paths that expect an access token).
-   - `postman-team-id` → `identity.team` from the mint response (for Bifrost / org headers where required).
+   - `postman-team-id` → `session.identity.team` from the mint response (for Bifrost / org headers where required).
 
 The OpenAPI document in this repo (`openapi.yaml`) is a minimal dummy API used as the spec source for the onboarding run.
 
