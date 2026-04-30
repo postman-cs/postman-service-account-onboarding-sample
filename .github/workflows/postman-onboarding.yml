@@ -1,0 +1,60 @@
+# Sample: mint a short-lived Postman service-account session token via API key,
+# then pass it to postman-api-onboarding-action for Bifrost-backed steps.
+#
+# Repository secrets (GitHub → Settings → Secrets):
+#   POSTMAN_API_KEY — API key for the service account (mint endpoint + bootstrap/sync).
+#
+# Optional:
+#   POSTMAN_TEAM_ID — pass through when org-mode / Bifrost needs an explicit team id.
+#
+# Note: spec-url uses raw.githubusercontent.com; that URL must be reachable by Postman
+# (public repo or equivalent). Private repos need a hosted spec URL Postman can fetch.
+
+name: Postman API onboarding
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  onboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Mint Postman service account access token
+        id: postman_token
+        env:
+          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+        run: |
+          set -euo pipefail
+          RESPONSE="$(curl -sS -X POST "https://api.getpostman-beta.com/service-account-tokens" \
+            -H "x-api-key: ${POSTMAN_API_KEY}" \
+            -H "Content-Type: application/json")"
+          TOKEN="$(echo "${RESPONSE}" | jq -r '.session.token // empty')"
+          if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
+            echo "::error::Could not read session token from service-account-tokens response"
+            echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
+            exit 1
+          fi
+          echo "::add-mask::${TOKEN}"
+          echo "token=${TOKEN}" >> "${GITHUB_OUTPUT}"
+
+      - name: Postman API onboarding
+        uses: postman-cs/postman-api-onboarding-action@main
+        with:
+          project-name: sample-pet-store-github-demo
+          spec-url: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/openapi.yaml
+          spec-path: openapi.yaml
+          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          postman-access-token: ${{ steps.postman_token.outputs.token }}
+          postman-team-id: ${{ secrets.POSTMAN_TEAM_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          generate-ci-workflow: 'false'
+          org-mode: 'false'
