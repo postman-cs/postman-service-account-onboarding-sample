@@ -33,13 +33,28 @@ jobs:
           POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
         run: |
           set -euo pipefail
-          RESPONSE="$(curl -sS -X POST "https://api.getpostman-beta.com/service-account-tokens" \
-            -H "x-api-key: ${POSTMAN_API_KEY}" \
-            -H "Content-Type: application/json")"
+          if [ -z "${POSTMAN_API_KEY:-}" ]; then
+            echo "::error::POSTMAN_API_KEY is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          MINT_URL="https://api.getpostman-beta.com/service-account-tokens"
+          HTTP_CODE="$(
+            curl -sS -o mint_response.json -w "%{http_code}" -X POST "${MINT_URL}" \
+              -H "x-api-key: ${POSTMAN_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -d '{}'
+          )"
+          RESPONSE="$(cat mint_response.json)"
+          rm -f mint_response.json
+          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
+            echo "::error::service-account-tokens failed (HTTP ${HTTP_CODE})"
+            echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
+            exit 1
+          fi
           TOKEN="$(echo "${RESPONSE}" | jq -r '.session.token // empty')"
           TEAM_ID="$(echo "${RESPONSE}" | jq -r '.identity.team // empty')"
           if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
-            echo "::error::Could not read session token from service-account-tokens response"
+            echo "::error::Mint succeeded (HTTP ${HTTP_CODE}) but response had no .session.token"
             echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
             exit 1
           fi
