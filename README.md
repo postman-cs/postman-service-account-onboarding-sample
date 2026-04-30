@@ -22,14 +22,6 @@ The workflow file is [`.github/workflows/postman-onboarding.yml`](.github/workfl
 
 ---
 
-## Official `postman-cli` on GitHub is not modified
-
-The patch runs **only on the ephemeral checkout inside GitHub Actions**. There is **no commit**, **no push**, and **no fork required**. When the job finishes, the runner discards the clone.
-
-The canonical **`postman-eng/postman-cli`** repository stays exactly as your team maintains it. Long term, the same behavior belongs in a normal PR to eng CLI if product wants it supported without a CI-only patch.
-
----
-
 ## What you need to configure
 
 ### GitHub repository secrets
