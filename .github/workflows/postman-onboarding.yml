@@ -1,17 +1,13 @@
-# Sample: mint a short-lived Postman service-account session token via API key,
-# then pass it to postman-api-onboarding-action for Bifrost-backed steps.
+# Sample: mint service-account session token, build mainline postman-eng/postman-cli with a
+# CI login patch, then run postman-api-onboarding-action.
 #
-# Repository secrets (GitHub → Settings → Secrets):
-#   POSTMAN_API_KEY — API key for the service account (mint endpoint + bootstrap/sync).
+# Secrets:
+#   POSTMAN_API_KEY — service account key (mint + Postman APIs).
+#   POSTMAN_ENG_CLI_CHECKOUT_TOKEN — PAT with repo read on postman-eng/postman-cli (private).
 #
-# Mainline Postman CLI resolves endpoints using lib/config/cli-environment style config;
-# set POSTMAN_CHANNEL=beta so login and other CLI calls hit the beta plane (pairs with
-# mint URL api.getpostman-beta.com).
-#
-# postman-team-id is taken from the mint response (.session.identity.team, or .identity.team).
-#
-# Note: spec-url uses raw.githubusercontent.com; that URL must be reachable by Postman
-# (public repo or equivalent). Private repos need a hosted spec URL Postman can fetch.
+# POSTMAN_CHANNEL=beta selects lib/config/cli-environment/beta (api.getpostman-beta.com, etc.).
+# POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN (mint output) makes `postman login --with-api-key` skip
+# /me validation and store the minted access token (see scripts/patch-postman-cli-ci-login.js).
 
 name: Postman API onboarding
 
@@ -27,11 +23,46 @@ permissions:
 jobs:
   onboard:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       POSTMAN_CHANNEL: beta
     steps:
-      - name: Checkout
+      - name: Checkout sample repo
         uses: actions/checkout@v4
+
+      - name: Checkout Postman CLI (postman-eng)
+        uses: actions/checkout@v4
+        with:
+          repository: postman-eng/postman-cli
+          ref: develop
+          path: postman-cli-src
+          token: ${{ secrets.POSTMAN_ENG_CLI_CHECKOUT_TOKEN }}
+
+      - name: Setup Node and pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Patch and build Postman CLI
+        run: |
+          set -euo pipefail
+          node "${GITHUB_WORKSPACE}/scripts/patch-postman-cli-ci-login.js" "${GITHUB_WORKSPACE}/postman-cli-src"
+          cd "${GITHUB_WORKSPACE}/postman-cli-src"
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Install postman on PATH
+        run: |
+          set -euo pipefail
+          POSTMAN_JS="${GITHUB_WORKSPACE}/postman-cli-src/dist/bin/postman.js"
+          test -f "$POSTMAN_JS"
+          printf '%s\n' '#!/usr/bin/env bash' "exec node \"${POSTMAN_JS}\" \"\$@\"" | sudo tee /usr/local/bin/postman > /dev/null
+          sudo chmod +x /usr/local/bin/postman
+          postman --version
 
       - name: Mint Postman service account access token
         id: postman_token
@@ -40,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${POSTMAN_API_KEY:-}" ]; then
-            echo "::error::POSTMAN_API_KEY is not set. Add it under Settings → Secrets and variables → Actions."
+            echo "::error::POSTMAN_API_KEY is not set."
             exit 1
           fi
           MINT_URL="https://api.getpostman-beta.com/service-account-tokens"
@@ -60,12 +91,12 @@ jobs:
           TOKEN="$(echo "${RESPONSE}" | jq -r '.session.token // empty')"
           TEAM_ID="$(echo "${RESPONSE}" | jq -r '.session.identity.team // .identity.team // empty')"
           if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
-            echo "::error::Mint succeeded (HTTP ${HTTP_CODE}) but response had no .session.token"
+            echo "::error::Mint succeeded but no .session.token"
             echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
             exit 1
           fi
           if [ -z "${TEAM_ID}" ] || [ "${TEAM_ID}" = "null" ]; then
-            echo "::error::Could not read team id (.session.identity.team or .identity.team) from mint response"
+            echo "::error::Could not read team id from mint response"
             echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
             exit 1
           fi
@@ -75,6 +106,8 @@ jobs:
 
       - name: Postman API onboarding
         uses: postman-cs/postman-api-onboarding-action@main
+        env:
+          POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN: ${{ steps.postman_token.outputs.token }}
         with:
           project-name: sample-pet-store-github-demo
           spec-url: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/openapi.yaml
