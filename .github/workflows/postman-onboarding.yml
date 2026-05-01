@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   onboard:
-    runs-on: ubuntu-latest-x64-4core
+    runs-on: ubuntu-latest-4-cores
     timeout-minutes: 45
     env:
       POSTMAN_CHANNEL: beta
