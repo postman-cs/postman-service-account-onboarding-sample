@@ -1,68 +1,61 @@
-# Postman service-account onboarding (GitHub Actions sample)
+# Service-account beta onboarding (sample)
 
-This repository is a **working example** of onboarding an OpenAPI spec with **[postman-api-onboarding-action](https://github.com/postman-cs/postman-api-onboarding-action)** when you use a **beta service-account API key** and mint a **session token** from **`service-account-tokens`**.
+Sample repo for **[postman-api-onboarding-action](https://github.com/postman-cs/postman-api-onboarding-action)** with a **beta** service-account key: mint **`service-account-tokens`**, pass **`postman-access-token`** + team id, and rely on the **beta-baked Postman CLI** for bootstrap `postman login`.
 
-It is aimed at teams who hit **`postman login --with-api-key` invalid key** on shipped CLI builds because login validates against the wrong plane or **`/me`** does not treat service-account keys like normal user keys.
-
----
-
-## What this workflow does (end to end)
-
-The workflow file is [`.github/workflows/postman-onboarding.yml`](.github/workflows/postman-onboarding.yml). Each run:
-
-1. **Clones [postman-eng/postman-cli](https://github.com/postman-eng/postman-cli)** (`develop`) into `postman-cli-src/` on the runner (needs a PAT—see below).
-2. **Runs [`scripts/patch-postman-cli-ci-login.js`](scripts/patch-postman-cli-ci-login.js)** on that clone only. The patch teaches `postman login --with-api-key` to accept a **minted session token** via env (`POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN`) so bootstrap does not rely on **`GET …/me`** with the API key alone.
-3. **Builds** that clone with **pnpm** (`pnpm install`, `pnpm run build`) and installs `dist/bin/postman.js` as the `postman` command on `PATH`.  
-   [postman-bootstrap-action](https://github.com/postman-cs/postman-bootstrap-action) sees `postman` already installed and **does not** download the public installer script.
-4. Sets **`POSTMAN_CHANNEL=beta`** on the job so eng **`lib/config/cli-environment`** resolves **beta base URLs** (for example `https://api.getpostman-beta.com`) and related paths—same mechanism described internally under `lib/config/cli-environment/`.
-5. **Mints** a token: `POST https://api.getpostman-beta.com/service-account-tokens` with header `x-api-key: <POSTMAN_API_KEY>`, reads **`session.token`** and **`session.identity.team`** (with fallback to top-level **`identity.team`** if present).
-6. Runs **postman-api-onboarding-action** with:
-   - **`postman-api-key`** / **`postman-access-token`** / **`postman-team-id`** from mint outputs  
-   - **`POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN`** on the onboarding step so patched **`postman login`** can persist **API key + access token** together.
+Internal runbook context (Access, installers, prod vs beta artifacts): see **Service-Account Beta: CSE Testing Runbook** (Jared Boynton) in your internal docs.
 
 ---
 
-## What you need to configure
+## Runner: must be inside Postman Access
 
-### GitHub repository secrets
+`api.getpostman-beta.com`, `dl-cli.pstmn-beta.io`, and related beta hosts sit behind **Cloudflare Access**. **GitHub-hosted `ubuntu-latest` cannot reach them** (you get an HTML SSO interstitial, not JSON — easy to misread as “invalid API key”).
 
-In **Settings → Secrets and variables → Actions** for this repo:
+Use a **self-hosted Actions runner** on a **Warp-enrolled Postman machine** (or another path inside Access). Register it on this repo and give it labels **`self-hosted`** and **`postman-service-account-beta`** (or change [`runs-on`](.github/workflows/postman-onboarding.yml) to match the labels you chose).
 
-| Secret | Required | Description |
-| --- | --- | --- |
-| **`POSTMAN_API_KEY`** | Yes | Postman **service account** API key. Must work against **`https://api.getpostman-beta.com/service-account-tokens`** for minting. |
-| **`POSTMAN_ENG_CLI_CHECKOUT_TOKEN`** | Yes | Personal access token for an account that can **read** the private **`postman-eng/postman-cli`** repo. Used only by `actions/checkout` to clone it. Typical choices: **classic PAT** with **`repo`** scope for that org, or a **fine-grained PAT** with **Contents: Read** on **`postman-eng/postman-cli`**. |
-
-The default **`GITHUB_TOKEN`** for this repo **cannot** clone another private org repo; that is why the second secret exists.
-
-### GitHub Actions billing
-
-If GitHub shows a message about **failed payments** or **spending limits**, jobs will not start until **Billing & plans** is fixed for the account or organization that owns this repo.
-
-### Optional: private npm packages (`pnpm install`)
-
-If the **Patch and build Postman CLI** step fails while resolving **`@postman/*`** packages, your CI likely needs **internal npm registry credentials** (for example **`NODE_AUTH_TOKEN`** and an **`.npmrc`** step). That is environment-specific; wire it the same way other Postman eng repos do.
+First step in the workflow probes `GET https://api.getpostman-beta.com/me` and fails fast if the body looks like a Cloudflare login page.
 
 ---
 
-## OpenAPI spec URL
+## What the workflow does
 
-The workflow passes **`spec-url`** as a **`raw.githubusercontent.com`** URL for **`openapi.yaml`** at the **current commit SHA**. Postman’s servers must be able to **download that URL**, which usually means this repo is **public** or the spec is hosted somewhere reachable to Postman.
+1. **Access probe** — sanity-check you are not outside the perimeter.
+2. **Install CLI** — `curl -fsSL https://dl-cli.pstmn-beta.io/install/unix.sh | sh`  
+   Beta installers ship a binary with **channel baked at build time**; you do **not** rely on `POSTMAN_CHANNEL` at runtime (that only applies to an unbundled **source** `pnpm run build` / `node dist/bin/postman.js` flow).
+3. **Mint** — `POST https://api.getpostman-beta.com/service-account-tokens` with `x-api-key`, read `session.token` and `session.identity.team` (fallback: top-level `identity.team`).
+4. **Onboarding action** — `postman-api-key`, minted `postman-access-token`, `postman-team-id`.  
+   **`generate-ci-workflow` is off** so repo-sync does not emit a workflow that reinstalls **prod** CLI from `dl-cli.pstmn.io` (prod-first generated CI is called out in the runbook).
+
+Bootstrap only curls prod when **`postman` is missing from PATH**; we install beta first so login uses the beta artifact.
 
 ---
 
-## Customization (common edits)
+## Secrets
 
-| Goal | Where to change |
+| Secret | Purpose |
 | --- | --- |
-| Different CLI branch or tag | `ref:` on the **Checkout Postman CLI** step in [`.github/workflows/postman-onboarding.yml`](.github/workflows/postman-onboarding.yml) |
-| Different Postman project name | `project-name` input on the onboarding step |
-| Org / Bifrost behavior | `org-mode`, **`POSTMAN_TEAM_ID`** via mint output (already wired) or action inputs per upstream docs |
-| Generate CI workflow from onboarding | `generate-ci-workflow: 'true'` |
+| **`POSTMAN_API_KEY`** | Service-account PMAK; mint + APIs + `postman login --with-api-key`. |
+
+No PAT is required to clone `postman-eng/postman-cli` anymore — we use the public beta installer URL on the self-hosted runner.
+
+---
+
+## OpenAPI `spec-url`
+
+Uses `raw.githubusercontent.com` for `openapi.yaml` at the workflow commit. Postman must fetch that URL (usually a **public** repo).
+
+---
+
+## Customization
+
+| Change | Where |
+| --- | --- |
+| Runner labels | `runs-on` in [`.github/workflows/postman-onboarding.yml`](.github/workflows/postman-onboarding.yml) |
+| CLI branch / unreleased develop | Runbook **source build** path locally; this workflow tracks the **published beta dl-cli** artifact |
+| `project-name`, org mode, generated CI | Inputs on the onboarding step |
 
 ---
 
 ## References
 
 - [postman-api-onboarding-action](https://github.com/postman-cs/postman-api-onboarding-action)
-- [postman-eng/postman-cli](https://github.com/postman-eng/postman-cli) (internal source this workflow builds)
+- [postman-eng/postman-cli](https://github.com/postman-eng/postman-cli) — `develop`, beta installer host `dl-cli.pstmn-beta.io`

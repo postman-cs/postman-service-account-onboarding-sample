@@ -1,13 +1,11 @@
-# Sample: mint service-account session token, build mainline postman-eng/postman-cli with a
-# CI login patch, then run postman-api-onboarding-action.
+# Internal service-account beta onboarding. GitHub-hosted runners cannot reach beta
+# (api.getpostman-beta.com, dl-cli.pstmn-beta.io) without Postman Access; use a self-hosted
+# runner on an enrolled machine (Warp). See repo README.
 #
-# Secrets:
-#   POSTMAN_API_KEY — service account key (mint + Postman APIs).
-#   POSTMAN_ENG_CLI_CHECKOUT_TOKEN — PAT with repo read on postman-eng/postman-cli (private).
+# Secrets: POSTMAN_API_KEY only.
 #
-# POSTMAN_CHANNEL=beta selects lib/config/cli-environment/beta (api.getpostman-beta.com, etc.).
-# POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN (mint output) makes `postman login --with-api-key` skip
-# /me validation and store the minted access token (see scripts/patch-postman-cli-ci-login.js).
+# Bootstrap skips dl-cli.pstmn.io when `postman` is already on PATH — we install the beta-baked
+# CLI from dl-cli.pstmn-beta.io first so login hits beta /me.
 
 name: Postman API onboarding
 
@@ -22,46 +20,28 @@ permissions:
 
 jobs:
   onboard:
-    runs-on: ubuntu-latest-4-cores
-    timeout-minutes: 45
-    env:
-      POSTMAN_CHANNEL: beta
+    runs-on: [self-hosted, postman-service-account-beta]
+    timeout-minutes: 30
     steps:
-      - name: Checkout sample repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout Postman CLI (postman-eng)
-        uses: actions/checkout@v4
-        with:
-          repository: postman-eng/postman-cli
-          ref: develop
-          path: postman-cli-src
-          token: ${{ secrets.POSTMAN_ENG_CLI_CHECKOUT_TOKEN }}
-
-      - name: Setup Node and pnpm
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Patch and build Postman CLI
+      - name: Check Postman Access (beta API reachable)
         run: |
           set -euo pipefail
-          node "${GITHUB_WORKSPACE}/scripts/patch-postman-cli-ci-login.js" "${GITHUB_WORKSPACE}/postman-cli-src"
-          cd "${GITHUB_WORKSPACE}/postman-cli-src"
-          pnpm install --frozen-lockfile
-          pnpm run build
+          curl -sS -o /tmp/pm-access-probe "https://api.getpostman-beta.com/me" || true
+          if head -c 300 /tmp/pm-access-probe | grep -qiE 'cloudflare|sign in'; then
+            echo "::error::Beta API returned HTML (likely outside Postman Access). Use a Warp-enrolled self-hosted runner."
+            head -c 400 /tmp/pm-access-probe || true
+            exit 1
+          fi
+          rm -f /tmp/pm-access-probe
+          echo "Probe OK (not Cloudflare interstitial)."
 
-      - name: Install postman on PATH
+      - name: Install Postman CLI (beta channel)
         run: |
           set -euo pipefail
-          POSTMAN_JS="${GITHUB_WORKSPACE}/postman-cli-src/dist/bin/postman.js"
-          test -f "$POSTMAN_JS"
-          printf '%s\n' '#!/usr/bin/env bash' "exec node \"${POSTMAN_JS}\" \"\$@\"" | sudo tee /usr/local/bin/postman > /dev/null
-          sudo chmod +x /usr/local/bin/postman
+          curl -fsSL https://dl-cli.pstmn-beta.io/install/unix.sh | sh
           postman --version
 
       - name: Mint Postman service account access token
@@ -106,8 +86,6 @@ jobs:
 
       - name: Postman API onboarding
         uses: postman-cs/postman-api-onboarding-action@main
-        env:
-          POSTMAN_SERVICE_ACCOUNT_SESSION_TOKEN: ${{ steps.postman_token.outputs.token }}
         with:
           project-name: sample-pet-store-github-demo
           spec-url: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/openapi.yaml
