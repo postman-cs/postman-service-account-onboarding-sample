@@ -22,7 +22,7 @@ examples:
         type: json
         content: |-
           {
-            "id": "6e5ac39f-eb7f-25d9-d4a2-f0ec2ceaeb7b",
+            "id": "304576cd-0c30-7c33-b50e-ac39ffefd133",
             "name": "string",
             "tag": "string"
           }

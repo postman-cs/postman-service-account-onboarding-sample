@@ -149,7 +149,7 @@ examples:
         type: json
         content: |-
           {
-            "id": "e97ecc7a-c559-8e76-230c-8b9c3dae2610",
+            "id": "a6d729e9-1f7c-2c73-a274-85c1f15d88c6",
             "name": "string",
             "tag": "string"
           }
