@@ -42,8 +42,15 @@ jobs:
       - name: Install Postman CLI (beta channel)
         run: |
           set -euo pipefail
-          curl -fsSL https://dl-cli.pstmn-beta.io/install/unix.sh | sh
-          postman --version
+          # Beta CLI is typically pre-installed on the postman-cse runner to avoid
+          # per-run sudo for /usr/local/bin. Fall back to curl-install if a beta-baked
+          # binary isn't already on PATH (e.g., first run on a fresh runner).
+          if command -v postman >/dev/null 2>&1 && postman --version 2>/dev/null | grep -q beta; then
+            echo "Using pre-installed beta CLI: $(postman --version)"
+          else
+            curl -fsSL https://dl-cli.pstmn-beta.io/install/unix.sh | sh
+            postman --version
+          fi
 
       - name: Mint Postman service account access token
         id: postman_token
