@@ -21,7 +21,7 @@ First step in the workflow probes `GET https://api.getpostman-beta.com/me` and f
 1. **Access probe** — sanity-check you are not outside the perimeter.
 2. **Install CLI** — `curl -fsSL https://dl-cli.pstmn-beta.io/install/unix.sh | sh`  
    Beta installers ship a binary with **channel baked at build time**; you do **not** rely on `POSTMAN_CHANNEL` at runtime (that only applies to an unbundled **source** `pnpm run build` / `node dist/bin/postman.js` flow).
-3. **Mint** — `POST https://api.getpostman-beta.com/service-account-tokens` with `x-api-key`, read `session.token` and `session.identity.team` (fallback: top-level `identity.team`).
+3. **Mint** — `POST https://api.getpostman-beta.com/service-account-tokens` with body `{"apiKey":"<PMAK>"}`, read `.access_token`. The mint response no longer carries team id, so the workflow resolves it from `GET https://api.getpostman-beta.com/me` (tries `user.teamId`, `team.id`, `identity.team`, etc.; falls back to legacy `session.token` / `session.identity.team` shapes).
 4. **Onboarding action** — `postman-api-key`, minted `postman-access-token`, `postman-team-id`.  
    **`generate-ci-workflow` is off** so repo-sync does not emit a workflow that reinstalls **prod** CLI from `dl-cli.pstmn.io` (prod-first generated CI is called out in the runbook).
 

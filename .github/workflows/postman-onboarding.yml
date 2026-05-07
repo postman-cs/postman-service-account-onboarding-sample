@@ -54,12 +54,15 @@ jobs:
             echo "::error::POSTMAN_API_KEY is not set."
             exit 1
           fi
+
+          # New shape: POST { "apiKey": "<PMAK>" } -> { "access_token": "..." }
+          # (Older shape returned .session.token + .session.identity.team; kept as fallback.)
           MINT_URL="https://api.getpostman-beta.com/service-account-tokens"
+          MINT_BODY="$(jq -nc --arg k "${POSTMAN_API_KEY}" '{apiKey:$k}')"
           HTTP_CODE="$(
             curl -sS -o mint_response.json -w "%{http_code}" -X POST "${MINT_URL}" \
-              -H "x-api-key: ${POSTMAN_API_KEY}" \
               -H "Content-Type: application/json" \
-              -d '{}'
+              --data "${MINT_BODY}"
           )"
           RESPONSE="$(cat mint_response.json)"
           rm -f mint_response.json
@@ -68,20 +71,44 @@ jobs:
             echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
             exit 1
           fi
-          TOKEN="$(echo "${RESPONSE}" | jq -r '.session.token // empty')"
-          TEAM_ID="$(echo "${RESPONSE}" | jq -r '.session.identity.team // .identity.team // empty')"
+          TOKEN="$(echo "${RESPONSE}" | jq -r '.access_token // .session.token // empty')"
           if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
-            echo "::error::Mint succeeded but no .session.token"
-            echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
-            exit 1
-          fi
-          if [ -z "${TEAM_ID}" ] || [ "${TEAM_ID}" = "null" ]; then
-            echo "::error::Could not read team id from mint response"
+            echo "::error::Mint succeeded but no access token in response"
             echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
             exit 1
           fi
           echo "::add-mask::${TOKEN}"
           echo "token=${TOKEN}" >> "${GITHUB_OUTPUT}"
+
+          # Mint response no longer carries team id; resolve it from /me.
+          ME_URL="https://api.getpostman-beta.com/me"
+          ME_CODE="$(
+            curl -sS -o me_response.json -w "%{http_code}" "${ME_URL}" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H "x-api-key: ${POSTMAN_API_KEY}"
+          )"
+          ME_BODY="$(cat me_response.json)"
+          rm -f me_response.json
+          if [ "${ME_CODE}" -lt 200 ] || [ "${ME_CODE}" -ge 300 ]; then
+            echo "::error::/me failed (HTTP ${ME_CODE})"
+            echo "${ME_BODY}" | jq . 2>/dev/null || echo "${ME_BODY}"
+            exit 1
+          fi
+          TEAM_ID="$(echo "${ME_BODY}" | jq -r '
+            .user.teamId
+            // .user.team
+            // .teamId
+            // .team.id
+            // .team
+            // .identity.team
+            // .session.identity.team
+            // empty
+          ')"
+          if [ -z "${TEAM_ID}" ] || [ "${TEAM_ID}" = "null" ]; then
+            echo "::error::Could not read team id from /me response"
+            echo "${ME_BODY}" | jq . 2>/dev/null || echo "${ME_BODY}"
+            exit 1
+          fi
           echo "team_id=${TEAM_ID}" >> "${GITHUB_OUTPUT}"
 
       - name: Postman API onboarding
