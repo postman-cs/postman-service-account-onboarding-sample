@@ -14,12 +14,12 @@ examples:
         content: |-
           [
             {
-              "id": "d154b729-25c3-199f-860f-be43bdcb1458",
+              "id": "2e5fc683-49bd-8a92-16f6-349cd18aab29",
               "name": "string",
               "tag": "string"
             },
             {
-              "id": "51e3484e-7df1-c1de-9c6d-1f824fdd5add",
+              "id": "088f0b29-9292-2f28-a692-0933447902d1",
               "name": "string",
               "tag": "string"
             }

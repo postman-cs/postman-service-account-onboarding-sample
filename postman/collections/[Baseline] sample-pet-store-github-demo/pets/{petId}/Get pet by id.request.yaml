@@ -16,7 +16,7 @@ examples:
         type: json
         content: |-
           {
-            "id": "72f4b7f3-3506-66c0-d5b4-c230c4ed6f5d",
+            "id": "ada8b961-78fd-b511-524a-61a230649e01",
             "name": "string",
             "tag": "string"
           }
