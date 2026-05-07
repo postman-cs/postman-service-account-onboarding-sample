@@ -41,7 +41,14 @@ No PAT is required to clone `postman-eng/postman-cli` anymore — we use the pub
 
 ## OpenAPI `spec-url`
 
-The onboarding stack downloads **`spec-url`** with an unauthenticated HTTP client. For a **private** repo, a plain `https://raw.githubusercontent.com/...` URL returns **404**, which surfaces as `CONTRACT_SPEC_FETCH_FAILED`. This workflow passes **`github.token`** in the URL userinfo so `raw.githubusercontent.com` can serve the file at the workflow commit. **Public** repos can omit the token, but embedding it is harmless when `GITHUB_TOKEN` has read access to the repo.
+**postman-bootstrap-action** loads the spec with a strict HTTPS client: **no username/password in the URL** (embedded tokens trigger `CONTRACT_SPEC_FETCH_BLOCKED`), and it **does not** attach a GitHub `Authorization` header. So **`spec-url` must be anonymously fetchable over HTTPS**.
+
+| Repository | What to do |
+| --- | --- |
+| **Public** | Default is fine: `https://raw.githubusercontent.com/<owner>/<repo>/<sha>/openapi.yaml` (this workflow uses your commit SHA). |
+| **Private** | Set repository variable **`POSTMAN_ONBOARDING_SPEC_URL`** to a **public** HTTPS URL that serves the same `openapi.yaml` (for example a public mirror repo, a raw gist URL, or an internal CDN). The workflow verifies that URL returns HTTP 200 before calling onboarding. |
+
+Making this sample repository **public** is the lowest-friction option if policy allows.
 
 ---
 

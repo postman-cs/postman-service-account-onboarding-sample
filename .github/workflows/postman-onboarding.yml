@@ -2,7 +2,7 @@
 # (api.getpostman-beta.com, dl-cli.pstmn-beta.io) without Postman Access; use a self-hosted
 # runner on an enrolled machine (Warp). See repo README.
 #
-# Secrets: POSTMAN_API_KEY only.
+# Secrets: POSTMAN_API_KEY only. Optional repo variable: POSTMAN_ONBOARDING_SPEC_URL (see README).
 #
 # Bootstrap skips dl-cli.pstmn.io when `postman` is already on PATH — we install the beta-baked
 # CLI from dl-cli.pstmn-beta.io first so login hits beta /me.
@@ -111,13 +111,42 @@ jobs:
           fi
           echo "team_id=${TEAM_ID}" >> "${GITHUB_OUTPUT}"
 
-      # Bootstrap fetches spec-url with plain HTTP (no GitHub headers). Anonymous
-      # raw.githubusercontent.com returns 404 for private repos — embed GITHUB_TOKEN.
+      # postman-bootstrap-action loads spec-url via safe HTTPS fetch only: no userinfo
+      # (credentials in the URL -> CONTRACT_SPEC_FETCH_BLOCKED). It does not send GitHub
+      # Authorization headers, so anonymous raw.githubusercontent.com 404s on private repos.
+      # Optional repo variable POSTMAN_ONBOARDING_SPEC_URL = public HTTPS URL to the same OpenAPI.
+      - name: Resolve spec-url for bootstrap
+        id: spec_url
+        env:
+          OVERRIDE: ${{ vars.POSTMAN_ONBOARDING_SPEC_URL }}
+          GH_REPO: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "${OVERRIDE:-}" ]; then
+            echo "url=${OVERRIDE}" >> "${GITHUB_OUTPUT}"
+            echo "Using repo variable POSTMAN_ONBOARDING_SPEC_URL."
+          else
+            echo "url=https://raw.githubusercontent.com/${GH_REPO}/${GH_SHA}/openapi.yaml" >> "${GITHUB_OUTPUT}"
+            echo "Using default raw URL (works when this repository is public)."
+          fi
+
+      - name: Verify spec-url is reachable without credentials
+        env:
+          SPEC_URL: ${{ steps.spec_url.outputs.url }}
+        run: |
+          set -euo pipefail
+          CODE="$(curl -sS -o /dev/null -w "%{http_code}" -A "postman-bootstrap-action" "${SPEC_URL}")"
+          if [ "${CODE}" != "200" ]; then
+            echo "::error::spec-url returned HTTP ${CODE}. Bootstrap forbids credentials in URLs, so private-repo raw URLs cannot work. Set repository variable POSTMAN_ONBOARDING_SPEC_URL to a public HTTPS URL that serves openapi.yaml (mirror, gist raw, or make the repo public)."
+            exit 1
+          fi
+
       - name: Postman API onboarding
         uses: postman-cs/postman-api-onboarding-action@main
         with:
           project-name: sample-pet-store-github-demo
-          spec-url: https://x-access-token:${{ github.token }}@raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/openapi.yaml
+          spec-url: ${{ steps.spec_url.outputs.url }}
           spec-path: openapi.yaml
           postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
           postman-access-token: ${{ steps.postman_token.outputs.token }}
