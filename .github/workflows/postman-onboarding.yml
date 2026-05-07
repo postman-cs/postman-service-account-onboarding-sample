@@ -178,6 +178,10 @@ jobs:
           postman-api-key: ${{ secrets.POSTMAN_BETA_API_KEY || secrets.POSTMAN_API_KEY }}
           postman-access-token: ${{ steps.postman_token.outputs.token }}
           postman-team-id: ${{ steps.postman_token.outputs.team_id }}
+          # The beta team resolved from /me is an org-mode sub-team. Pass it explicitly as
+          # workspace-team-id so bootstrap's createWorkspace scopes correctly. Without this,
+          # createWorkspace attempts an org-level POST /workspaces that the API rejects.
+          workspace-team-id: ${{ steps.postman_token.outputs.team_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           generate-ci-workflow: 'false'
           org-mode: 'true'
