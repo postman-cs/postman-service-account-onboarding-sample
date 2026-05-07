@@ -1,0 +1,20 @@
+workspace:
+  id: 3259fb3b-097d-4dc7-9438-95c5d37d3dfc
+localResources:
+  collections:
+    - ../postman/collections/[Baseline] sample-pet-store-github-demo
+    - ../postman/collections/[Smoke] sample-pet-store-github-demo
+    - ../postman/collections/[Contract] sample-pet-store-github-demo
+  environments:
+    - ../postman/environments/prod.postman_environment.json
+  specs:
+    - ../openapi.yaml
+cloudResources:
+  collections:
+    ../postman/collections/[Baseline] sample-pet-store-github-demo: 1598873-2fe6fdf8-3ab6-48ed-82a4-acb446bb6289
+    ../postman/collections/[Smoke] sample-pet-store-github-demo: 1598873-caf191b6-cd7a-4aef-85d6-9a39d953d3c0
+    ../postman/collections/[Contract] sample-pet-store-github-demo: 1598873-19505d0c-a452-4e2c-b739-68c15255ddd2
+  environments:
+    ../postman/environments/prod.postman_environment.json: 1598873-0d34155b-59eb-481d-b35f-b6cdf4ea9b6e
+  specs:
+    ../openapi.yaml: 0991d473-e7e2-4f00-bd25-1005e4b31afc

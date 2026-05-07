@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   onboard:
-    runs-on: [self-hosted, postman-service-account-beta]
+    runs-on: [self-hosted, postman-cse]
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -42,8 +42,15 @@ jobs:
       - name: Install Postman CLI (beta channel)
         run: |
           set -euo pipefail
-          curl -fsSL https://dl-cli.pstmn-beta.io/install/unix.sh | sh
-          postman --version
+          # Beta CLI is typically pre-installed on the postman-cse runner to avoid
+          # per-run sudo for /usr/local/bin. Fall back to curl-install if a beta-baked
+          # binary isn't already on PATH (e.g., first run on a fresh runner).
+          if command -v postman >/dev/null 2>&1 && postman --version 2>/dev/null | grep -q beta; then
+            echo "Using pre-installed beta CLI: $(postman --version)"
+          else
+            curl -fsSL https://dl-cli.pstmn-beta.io/install/unix.sh | sh
+            postman --version
+          fi
 
       - name: Mint Postman service account access token
         id: postman_token
@@ -149,14 +156,16 @@ jobs:
             exit 1
           fi
 
-      # Bootstrap/repo-sync always use https://api.getpostman.com (stock actions).
-      - name: Require production Postman API key
+      # Bootstrap/repo-sync base URLs are driven from the onboarding-action inputs below
+      # (postman-api-base / postman-bifrost-base / postman-gateway-base / postman-cli-install-url),
+      # so a single beta-scoped PMAK can drive mint + bootstrap + repo-sync on beta without a prod PMAK.
+      - name: Require Postman API key
         env:
-          PROD_PMAK: ${{ secrets.POSTMAN_API_KEY }}
+          PMAK: ${{ secrets.POSTMAN_API_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${PROD_PMAK:-}" ]; then
-            echo "::error::POSTMAN_API_KEY must be set to a PMAK valid on production https://api.getpostman.com. For beta-only mint, add POSTMAN_BETA_API_KEY and keep POSTMAN_API_KEY as your prod key (see README)."
+          if [ -z "${PMAK:-}" ]; then
+            echo "::error::POSTMAN_API_KEY must be set to a PMAK valid on the chosen stack (beta when POSTMAN_API_BASE points at api.getpostman-beta.com)."
             exit 1
           fi
 
@@ -166,9 +175,12 @@ jobs:
           project-name: sample-pet-store-github-demo
           spec-url: ${{ steps.spec_url.outputs.url }}
           spec-path: openapi.yaml
-          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          postman-api-key: ${{ secrets.POSTMAN_BETA_API_KEY || secrets.POSTMAN_API_KEY }}
           postman-access-token: ${{ steps.postman_token.outputs.token }}
           postman-team-id: ${{ steps.postman_token.outputs.team_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           generate-ci-workflow: 'false'
-          org-mode: 'false'
+          postman-api-base: https://api.getpostman-beta.com
+          postman-bifrost-base: https://bifrost-https-v4.gw.postman-beta.com
+          postman-gateway-base: https://gateway.postman-beta.com
+          postman-cli-install-url: https://dl-cli.pstmn-beta.io/install/unix.sh

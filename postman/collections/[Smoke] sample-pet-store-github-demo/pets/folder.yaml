@@ -1,0 +1,6 @@
+type: folder
+name: pets
+items:
+  - ref: ./{petId}/folder.yaml
+  - ref: ./List pets.request.yaml
+  - ref: ./Create a pet.request.yaml

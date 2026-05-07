@@ -5,3 +5,5 @@ self-hosted-runner:
     - ubuntu-latest-16-cores
     - ubuntu-latest-16-cores-arm64
     - ubuntu-latest-32-cores-arm64
+    - postman-cse
+    - postman-service-account-beta

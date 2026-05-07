@@ -1,0 +1,30 @@
+type: http
+name: List pets
+url: '{{baseUrl}}/pets'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+examples:
+  - response:
+      statusCode: 200
+      statusText: OK
+      body:
+        type: json
+        content: |-
+          [
+            {
+              "id": "238a6ea8-4e96-9d2a-4fff-066de6b7f8ad",
+              "name": "string",
+              "tag": "string"
+            },
+            {
+              "id": "ea06ac63-8965-d5d7-bcb8-7c5908ef223e",
+              "name": "string",
+              "tag": "string"
+            }
+          ]
+      headers:
+        - key: Content-Type
+          value: application/json
+    name: OK
