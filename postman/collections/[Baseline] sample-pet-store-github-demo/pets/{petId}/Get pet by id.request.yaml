@@ -1,0 +1,33 @@
+type: http
+name: Get pet by id
+url: '{{baseUrl}}/pets/:petId'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+pathVariables:
+  - key: petId
+    value: string
+examples:
+  - response:
+      statusCode: 200
+      statusText: OK
+      body:
+        type: json
+        content: |-
+          {
+            "id": "6e5ac39f-eb7f-25d9-d4a2-f0ec2ceaeb7b",
+            "name": "string",
+            "tag": "string"
+          }
+      headers:
+        - key: Content-Type
+          value: application/json
+    name: OK
+  - response:
+      statusCode: 404
+      statusText: Not Found
+      body:
+        type: text
+        content: ''
+    name: Not found

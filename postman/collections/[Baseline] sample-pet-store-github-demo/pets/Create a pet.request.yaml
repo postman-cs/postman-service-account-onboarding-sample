@@ -1,0 +1,32 @@
+type: http
+name: Create a pet
+url: '{{baseUrl}}/pets'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "string",
+      "tag": "string"
+    }
+examples:
+  - response:
+      statusCode: 201
+      statusText: Created
+      body:
+        type: json
+        content: |-
+          {
+            "id": "6e5ac39f-eb7f-25d9-d4a2-f0ec2ceaeb7b",
+            "name": "string",
+            "tag": "string"
+          }
+      headers:
+        - key: Content-Type
+          value: application/json
+    name: Created

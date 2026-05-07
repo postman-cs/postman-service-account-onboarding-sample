@@ -1,0 +1,12 @@
+$schema: https://schema.postman.com/json/draft-2020-12/collection/v3.0.0/
+type: collection
+name: '[Contract] sample-pet-store-github-demo'
+description: Dummy OpenAPI document for testing Postman API onboarding with a service-account token.
+id: 19505d0c-a452-4e2c-b739-68c15255ddd2
+variables:
+  - key: baseUrl
+    value: https://api.example.com/v1
+    type: any
+items:
+  - ref: ./pets/folder.yaml
+  - ref: ./00 - Resolve Secrets.request.yaml
