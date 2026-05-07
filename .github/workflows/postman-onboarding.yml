@@ -156,21 +156,19 @@ jobs:
             exit 1
           fi
 
-      # Bootstrap/repo-sync base URLs are driven from the onboarding-action inputs below
-      # (postman-api-base / postman-bifrost-base / postman-gateway-base / postman-cli-install-url),
-      # so a single beta-scoped PMAK can drive mint + bootstrap + repo-sync on beta without a prod PMAK.
+      # The composite action resolves beta API, Bifrost, gateway, observability, and CLI hosts from postman-stack.
       - name: Require Postman API key
         env:
           PMAK: ${{ secrets.POSTMAN_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${PMAK:-}" ]; then
-            echo "::error::POSTMAN_API_KEY must be set to a PMAK valid on the chosen stack (beta when POSTMAN_API_BASE points at api.getpostman-beta.com)."
+            echo "::error::POSTMAN_API_KEY must be set to a PMAK valid on the chosen Postman stack."
             exit 1
           fi
 
       - name: Postman API onboarding
-        uses: postman-cs/postman-api-onboarding-action@main
+        uses: postman-cs/postman-api-onboarding-action@v0.13.0
         with:
           project-name: sample-pet-store-github-demo
           spec-url: ${{ steps.spec_url.outputs.url }}
@@ -180,7 +178,4 @@ jobs:
           postman-team-id: ${{ steps.postman_token.outputs.team_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           generate-ci-workflow: 'false'
-          postman-api-base: https://api.getpostman-beta.com
-          postman-bifrost-base: https://bifrost-https-v4.gw.postman-beta.com
-          postman-gateway-base: https://gateway.postman-beta.com
-          postman-cli-install-url: https://dl-cli.pstmn-beta.io/install/unix.sh
+          postman-stack: beta
