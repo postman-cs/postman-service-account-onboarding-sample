@@ -41,7 +41,7 @@ No PAT is required to clone `postman-eng/postman-cli` anymore — we use the pub
 
 ## OpenAPI `spec-url`
 
-Uses `raw.githubusercontent.com` for `openapi.yaml` at the workflow commit. Postman must fetch that URL (usually a **public** repo).
+The onboarding stack downloads **`spec-url`** with an unauthenticated HTTP client. For a **private** repo, a plain `https://raw.githubusercontent.com/...` URL returns **404**, which surfaces as `CONTRACT_SPEC_FETCH_FAILED`. This workflow passes **`github.token`** in the URL userinfo so `raw.githubusercontent.com` can serve the file at the workflow commit. **Public** repos can omit the token, but embedding it is harmless when `GITHUB_TOKEN` has read access to the repo.
 
 ---
 

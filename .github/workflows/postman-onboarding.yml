@@ -111,11 +111,13 @@ jobs:
           fi
           echo "team_id=${TEAM_ID}" >> "${GITHUB_OUTPUT}"
 
+      # Bootstrap fetches spec-url with plain HTTP (no GitHub headers). Anonymous
+      # raw.githubusercontent.com returns 404 for private repos — embed GITHUB_TOKEN.
       - name: Postman API onboarding
         uses: postman-cs/postman-api-onboarding-action@main
         with:
           project-name: sample-pet-store-github-demo
-          spec-url: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/openapi.yaml
+          spec-url: https://x-access-token:${{ github.token }}@raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/openapi.yaml
           spec-path: openapi.yaml
           postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
           postman-access-token: ${{ steps.postman_token.outputs.token }}
