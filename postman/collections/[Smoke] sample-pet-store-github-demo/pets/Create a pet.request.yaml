@@ -40,7 +40,7 @@ examples:
         type: json
         content: |-
           {
-            "id": "b91f7d57-89bb-74c2-d711-53dc30510d63",
+            "id": "ea37a7f5-9537-ba73-357a-393a9eaafc1f",
             "name": "string",
             "tag": "string"
           }
