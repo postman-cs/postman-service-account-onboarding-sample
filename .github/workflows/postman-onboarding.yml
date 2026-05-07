@@ -2,7 +2,8 @@
 # (api.getpostman-beta.com, dl-cli.pstmn-beta.io) without Postman Access; use a self-hosted
 # runner on an enrolled machine (Warp). See repo README.
 #
-# Secrets: POSTMAN_API_KEY only. Optional repo variable: POSTMAN_ONBOARDING_SPEC_URL (see README).
+# Secrets: POSTMAN_API_KEY (prod PMAK for onboarding; see README). Optional: POSTMAN_BETA_API_KEY
+# for beta mint only. Optional repo variable: POSTMAN_ONBOARDING_SPEC_URL (see README).
 #
 # Bootstrap skips dl-cli.pstmn.io when `postman` is already on PATH — we install the beta-baked
 # CLI from dl-cli.pstmn-beta.io first so login hits beta /me.
@@ -48,17 +49,23 @@ jobs:
         id: postman_token
         env:
           POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+          POSTMAN_BETA_API_KEY: ${{ secrets.POSTMAN_BETA_API_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${POSTMAN_API_KEY:-}" ]; then
-            echo "::error::POSTMAN_API_KEY is not set."
+          # Beta mint: prefer POSTMAN_BETA_API_KEY; otherwise reuse POSTMAN_API_KEY (must be valid on beta).
+          MINT_KEY="${POSTMAN_BETA_API_KEY:-}"
+          if [ -z "${MINT_KEY}" ]; then
+            MINT_KEY="${POSTMAN_API_KEY:-}"
+          fi
+          if [ -z "${MINT_KEY}" ]; then
+            echo "::error::Set POSTMAN_BETA_API_KEY (beta PMAK for mint) and/or POSTMAN_API_KEY."
             exit 1
           fi
 
           # New shape: POST { "apiKey": "<PMAK>" } -> { "access_token": "..." }
           # (Older shape returned .session.token + .session.identity.team; kept as fallback.)
           MINT_URL="https://api.getpostman-beta.com/service-account-tokens"
-          MINT_BODY="$(jq -nc --arg k "${POSTMAN_API_KEY}" '{apiKey:$k}')"
+          MINT_BODY="$(jq -nc --arg k "${MINT_KEY}" '{apiKey:$k}')"
           HTTP_CODE="$(
             curl -sS -o mint_response.json -w "%{http_code}" -X POST "${MINT_URL}" \
               -H "Content-Type: application/json" \
@@ -85,7 +92,7 @@ jobs:
           ME_CODE="$(
             curl -sS -o me_response.json -w "%{http_code}" "${ME_URL}" \
               -H "Authorization: Bearer ${TOKEN}" \
-              -H "x-api-key: ${POSTMAN_API_KEY}"
+              -H "x-api-key: ${MINT_KEY}"
           )"
           ME_BODY="$(cat me_response.json)"
           rm -f me_response.json
@@ -139,6 +146,17 @@ jobs:
           CODE="$(curl -sS -o /dev/null -w "%{http_code}" -A "postman-bootstrap-action" "${SPEC_URL}")"
           if [ "${CODE}" != "200" ]; then
             echo "::error::spec-url returned HTTP ${CODE}. Bootstrap forbids credentials in URLs, so private-repo raw URLs cannot work. Set repository variable POSTMAN_ONBOARDING_SPEC_URL to a public HTTPS URL that serves openapi.yaml (mirror, gist raw, or make the repo public)."
+            exit 1
+          fi
+
+      # Bootstrap/repo-sync always use https://api.getpostman.com (stock actions).
+      - name: Require production Postman API key
+        env:
+          PROD_PMAK: ${{ secrets.POSTMAN_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PROD_PMAK:-}" ]; then
+            echo "::error::POSTMAN_API_KEY must be set to a PMAK valid on production https://api.getpostman.com. For beta-only mint, add POSTMAN_BETA_API_KEY and keep POSTMAN_API_KEY as your prod key (see README)."
             exit 1
           fi
 

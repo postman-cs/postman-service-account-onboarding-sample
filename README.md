@@ -29,11 +29,31 @@ Bootstrap only curls prod when **`postman` is missing from PATH**; we install be
 
 ---
 
+## Production Postman API vs beta (no bootstrap changes)
+
+**[postman-bootstrap-action](https://github.com/postman-cs/postman-bootstrap-action)** and **repo-sync** call **`https://api.getpostman.com`** for workspaces, specs, collections, etc. That is how the published actions work today—you do **not** need to fork them or add beta-specific code paths.
+
+A PMAK that only exists on **beta** (`api.getpostman-beta.com`) is **not** accepted on **prod**, so you see **`GET .../workspaces` → 401 Invalid API Key** if `postman-api-key` is beta-only.
+
+**Practical setup (two keys):**
+
+| Secret | Role |
+| --- | --- |
+| **`POSTMAN_BETA_API_KEY`** (optional) | Beta service-account PMAK used **only** for `service-account-tokens` and `GET /me` on `api.getpostman-beta.com`. |
+| **`POSTMAN_API_KEY`** | PMAK that is valid on **production** `https://api.getpostman.com` — passed to the onboarding action as `postman-api-key` (bootstrap + repo-sync). |
+
+If **`POSTMAN_BETA_API_KEY`** is omitted, the mint step falls back to **`POSTMAN_API_KEY`** (works only when that single key is valid on **both** beta and prod, which is uncommon).
+
+Confirm with your team that a **beta-minted** `postman-access-token` is intended to pair with **prod** API calls for your test scenario; if everything must stay on beta end-to-end, that requires a **platform change** in the actions (outside this sample).
+
+---
+
 ## Secrets
 
 | Secret | Purpose |
 | --- | --- |
-| **`POSTMAN_API_KEY`** | Service-account PMAK; mint + APIs + `postman login --with-api-key`. |
+| **`POSTMAN_API_KEY`** | PMAK for **production** Postman API (`postman-api-key` in onboarding). |
+| **`POSTMAN_BETA_API_KEY`** | Optional. Beta PMAK for mint + beta `/me` only. |
 
 No PAT is required to clone `postman-eng/postman-cli` anymore — we use the public beta installer URL on the self-hosted runner.
 
