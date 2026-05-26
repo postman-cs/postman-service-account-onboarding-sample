@@ -32,12 +32,12 @@ examples:
         content: |-
           [
             {
-              "id": "cd90448d-574d-6991-75b0-bdfc9a9f52e6",
+              "id": "47e09d05-16fb-ec07-49e7-c587c62ab13f",
               "name": "string",
               "tag": "string"
             },
             {
-              "id": "f282c078-6c7b-8eb4-c1f8-5e18c3735f7f",
+              "id": "420e4669-974b-7106-675e-a3d9d82f335c",
               "name": "string",
               "tag": "string"
             }
