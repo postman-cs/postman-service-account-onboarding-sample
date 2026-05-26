@@ -52,16 +52,78 @@ jobs:
             postman --version
           fi
 
-      # Mint a beta service-account access token and resolve team id.
-      # Replaces the prior inline curl/jq snippet with the postman-resolve-service-token-action
-      # composite. Behavior is identical for this workflow's contract (outputs.token,
-      # outputs.team-id) but kept on a SHA pin while the action repo is in open-alpha.
       - name: Mint Postman service account access token
         id: postman_token
-        uses: postman-cs/postman-resolve-service-token-action@ce5580f1a96ebdbcd63105c97f5671e0e816b544 # v0.1.0
-        with:
-          postman-api-key: ${{ secrets.POSTMAN_BETA_API_KEY || secrets.POSTMAN_API_KEY }}
-          postman-stack: beta
+        env:
+          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+          POSTMAN_BETA_API_KEY: ${{ secrets.POSTMAN_BETA_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Beta mint: prefer POSTMAN_BETA_API_KEY; otherwise reuse POSTMAN_API_KEY (must be valid on beta).
+          MINT_KEY="${POSTMAN_BETA_API_KEY:-}"
+          if [ -z "${MINT_KEY}" ]; then
+            MINT_KEY="${POSTMAN_API_KEY:-}"
+          fi
+          if [ -z "${MINT_KEY}" ]; then
+            echo "::error::Set POSTMAN_BETA_API_KEY (beta PMAK for mint) and/or POSTMAN_API_KEY."
+            exit 1
+          fi
+
+          # New shape: POST { "apiKey": "<PMAK>" } -> { "access_token": "..." }
+          # (Older shape returned .session.token + .session.identity.team; kept as fallback.)
+          MINT_URL="https://api.getpostman-beta.com/service-account-tokens"
+          MINT_BODY="$(jq -nc --arg k "${MINT_KEY}" '{apiKey:$k}')"
+          HTTP_CODE="$(
+            curl -sS -o mint_response.json -w "%{http_code}" -X POST "${MINT_URL}" \
+              -H "Content-Type: application/json" \
+              --data "${MINT_BODY}"
+          )"
+          RESPONSE="$(cat mint_response.json)"
+          rm -f mint_response.json
+          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
+            echo "::error::service-account-tokens failed (HTTP ${HTTP_CODE})"
+            echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
+            exit 1
+          fi
+          TOKEN="$(echo "${RESPONSE}" | jq -r '.access_token // .session.token // empty')"
+          if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
+            echo "::error::Mint succeeded but no access token in response"
+            echo "${RESPONSE}" | jq . 2>/dev/null || echo "${RESPONSE}"
+            exit 1
+          fi
+          echo "::add-mask::${TOKEN}"
+          echo "token=${TOKEN}" >> "${GITHUB_OUTPUT}"
+
+          # Mint response no longer carries team id; resolve it from /me.
+          ME_URL="https://api.getpostman-beta.com/me"
+          ME_CODE="$(
+            curl -sS -o me_response.json -w "%{http_code}" "${ME_URL}" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H "x-api-key: ${MINT_KEY}"
+          )"
+          ME_BODY="$(cat me_response.json)"
+          rm -f me_response.json
+          if [ "${ME_CODE}" -lt 200 ] || [ "${ME_CODE}" -ge 300 ]; then
+            echo "::error::/me failed (HTTP ${ME_CODE})"
+            echo "${ME_BODY}" | jq . 2>/dev/null || echo "${ME_BODY}"
+            exit 1
+          fi
+          TEAM_ID="$(echo "${ME_BODY}" | jq -r '
+            .user.teamId
+            // .user.team
+            // .teamId
+            // .team.id
+            // .team
+            // .identity.team
+            // .session.identity.team
+            // empty
+          ')"
+          if [ -z "${TEAM_ID}" ] || [ "${TEAM_ID}" = "null" ]; then
+            echo "::error::Could not read team id from /me response"
+            echo "${ME_BODY}" | jq . 2>/dev/null || echo "${ME_BODY}"
+            exit 1
+          fi
+          echo "team_id=${TEAM_ID}" >> "${GITHUB_OUTPUT}"
 
       # postman-bootstrap-action loads spec-url via safe HTTPS fetch only: no userinfo
       # (credentials in the URL -> CONTRACT_SPEC_FETCH_BLOCKED). It does not send GitHub
@@ -113,7 +175,7 @@ jobs:
           spec-path: openapi.yaml
           postman-api-key: ${{ secrets.POSTMAN_BETA_API_KEY || secrets.POSTMAN_API_KEY }}
           postman-access-token: ${{ steps.postman_token.outputs.token }}
-          postman-team-id: ${{ steps.postman_token.outputs.team-id }}
+          postman-team-id: ${{ steps.postman_token.outputs.team_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           generate-ci-workflow: 'false'
           postman-stack: beta
