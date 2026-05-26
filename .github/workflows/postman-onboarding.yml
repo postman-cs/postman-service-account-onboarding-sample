@@ -71,11 +71,14 @@ jobs:
 
           # New shape: POST { "apiKey": "<PMAK>" } -> { "access_token": "..." }
           # (Older shape returned .session.token + .session.identity.team; kept as fallback.)
+          # The endpoint now requires the API key in the x-api-key header in addition to
+          # the body; without the header beta returns 401 Invalid or inactive API key.
           MINT_URL="https://api.getpostman-beta.com/service-account-tokens"
           MINT_BODY="$(jq -nc --arg k "${MINT_KEY}" '{apiKey:$k}')"
           HTTP_CODE="$(
             curl -sS -o mint_response.json -w "%{http_code}" -X POST "${MINT_URL}" \
               -H "Content-Type: application/json" \
+              -H "x-api-key: ${MINT_KEY}" \
               --data "${MINT_BODY}"
           )"
           RESPONSE="$(cat mint_response.json)"
