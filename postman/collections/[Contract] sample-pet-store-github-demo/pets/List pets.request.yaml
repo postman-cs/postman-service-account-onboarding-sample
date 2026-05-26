@@ -157,12 +157,12 @@ examples:
         content: |-
           [
             {
-              "id": "b8aa796e-a2be-a056-2ac4-a01b1cd26934",
+              "id": "9f572a96-f3f2-e18b-7fb4-8f597ac819bd",
               "name": "string",
               "tag": "string"
             },
             {
-              "id": "1d70a97f-229a-f62d-c02d-790308974513",
+              "id": "69d6adc3-3d8f-a399-6d6a-57e9ce44d38c",
               "name": "string",
               "tag": "string"
             }
