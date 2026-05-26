@@ -34,7 +34,7 @@ examples:
         type: json
         content: |-
           {
-            "id": "1e286fa5-7209-b9f4-c973-3b1204a73d23",
+            "id": "005e33e2-eb1d-e160-29ff-0c2d980976e7",
             "name": "string",
             "tag": "string"
           }
